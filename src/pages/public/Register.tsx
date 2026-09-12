@@ -11,7 +11,7 @@ export const Register = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialRole = (searchParams.get('role') as 'student' | 'lecturer') || 'student';
-  const { login } = useAuth();
+  const { login, registerWithFirebase } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   
   const {
@@ -31,36 +31,46 @@ export const Register = () => {
 
   const onSubmit = async (data: RegisterFormValues) => {
     try {
-      // Check if email already exists
-      const existingUser = db.users.findByEmail(data.email);
-      if (existingUser) {
-        setError('email', { message: 'This email is already in use.' });
+      try {
+        // Create user with Firebase Auth & store profile in Firestore
+        await registerWithFirebase(data.email, data.password, {
+          first_name: data.first_name,
+          last_name: data.last_name,
+          role: data.role,
+          department: data.department,
+          faculty: data.faculty,
+          level: data.level,
+        });
+
+        navigate('/dashboard');
         return;
+      } catch (fbErr: any) {
+        if (fbErr.code === 'auth/email-already-in-use') {
+          setError('email', { message: 'This email is already registered.' });
+          return;
+        }
+
+        // Local fallback if Firebase network fails
+        const newUser: LocalUser = {
+          id: generateId(),
+          email: data.email,
+          password: data.password,
+          first_name: data.first_name,
+          last_name: data.last_name,
+          role: data.role,
+          is_active: true,
+          department: data.department,
+          faculty: data.faculty,
+          level: data.level,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+
+        db.users.save(newUser);
+        const { password, ...userProfile } = newUser;
+        login(userProfile);
+        navigate('/dashboard');
       }
-
-      // Create local user record
-      const newUser: LocalUser = {
-        id: generateId(),
-        email: data.email,
-        password: data.password, // Stored locally only for the mock
-        first_name: data.first_name,
-        last_name: data.last_name,
-        role: data.role,
-        is_active: true,
-        department: data.department,
-        faculty: data.faculty,
-        level: data.level,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-
-      db.users.save(newUser);
-
-      // Log them in immediately (stripping the password from session state)
-      const { password, ...userProfile } = newUser;
-      login(userProfile);
-
-      navigate('/dashboard');
     } catch (err: any) {
       console.error(err);
       setError('root', {

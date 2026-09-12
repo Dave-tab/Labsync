@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../lib/storage';
+import { firebaseDb } from '../lib/firebaseService';
 import { User, Mail, Building, Save } from 'lucide-react';
 
 export const Profile = () => {
@@ -15,42 +16,47 @@ export const Profile = () => {
 
   if (!user) return null;
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     setMessage('');
     
-    // Simulate API delay
-    setTimeout(() => {
+    try {
+      const updatedUser = {
+        ...user,
+        first_name: firstName,
+        last_name: lastName,
+        department: department,
+        faculty: faculty,
+        level: level,
+        updated_at: new Date().toISOString()
+      };
+
+      // Save to Firestore
       try {
-        const updatedUser = {
-          ...user,
-          first_name: firstName,
-          last_name: lastName,
-          department: department,
-          faculty: faculty,
-          level: level
-        };
-        
-        // In local storage, we fetch the full user (with password) to update it
-        const fullUserRecord = db.users.findById(user.id);
-        if (fullUserRecord) {
-          fullUserRecord.first_name = firstName;
-          fullUserRecord.last_name = lastName;
-          fullUserRecord.department = department;
-          fullUserRecord.faculty = faculty;
-          fullUserRecord.level = level;
-          db.users.save(fullUserRecord);
-        }
-        
-        login(updatedUser); // Update context
-        setMessage('Profile updated successfully!');
+        await firebaseDb.users.save(updatedUser);
       } catch (err) {
-        setMessage('Failed to update profile.');
-      } finally {
-        setIsSaving(false);
+        console.warn('Firestore user save note:', err);
       }
-    }, 600);
+
+      // Save to local storage
+      const fullUserRecord = db.users.findById(user.id);
+      if (fullUserRecord) {
+        fullUserRecord.first_name = firstName;
+        fullUserRecord.last_name = lastName;
+        fullUserRecord.department = department;
+        fullUserRecord.faculty = faculty;
+        fullUserRecord.level = level;
+        db.users.save(fullUserRecord);
+      }
+      
+      login(updatedUser);
+      setMessage('Profile updated successfully!');
+    } catch (err) {
+      setMessage('Failed to update profile.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (

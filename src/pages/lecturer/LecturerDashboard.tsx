@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { db, Slot, LocalUser, Appointment, generateId } from '../../lib/storage';
+import { firebaseDb } from '../../lib/firebaseService';
 import { Plus, Trash2, Calendar as CalendarIcon, Clock, BookOpen, Check, X, Settings } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
@@ -30,19 +31,60 @@ export const LecturerDashboard = () => {
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [endTime, setEndTime] = useState<Date | null>(null);
 
-  const loadData = () => {
+  const loadData = async () => {
     if (!user) return;
     
-    // Simulate network delay for slots
     setIsLoadingSlots(true);
-    setTimeout(() => {
+    try {
+      const fbSlots = await firebaseDb.slots.getByLecturer(user.id);
+      const localSlots = db.slots.getByLecturer(user.id);
+      const combined = [...fbSlots];
+      for (const s of localSlots) {
+        if (!combined.some(c => c.id === s.id)) {
+          combined.push(s);
+        }
+      }
+      setSlots(combined);
+    } catch {
       setSlots(db.slots.getByLecturer(user.id));
+    } finally {
       setIsLoadingSlots(false);
-    }, 500);
+    }
     
-    // Simulate network delay for appointments
     setIsLoadingAppointments(true);
-    setTimeout(() => {
+    try {
+      const rawAppointments = await firebaseDb.appointments.getByLecturer(user.id);
+      const allSlots = await firebaseDb.slots.getAll();
+      const localSlots = db.slots.getAll();
+      const mergedSlots = [...allSlots, ...localSlots];
+
+      const enriched: (Appointment & { student: LocalUser, slot: Slot })[] = [];
+      for (const app of rawAppointments) {
+        let student = await firebaseDb.users.get(app.student_id) as LocalUser;
+        if (!student) {
+          student = db.users.findById(app.student_id)!;
+        }
+        const slot = mergedSlots.find(s => s.id === app.slot_id);
+        if (student && slot) {
+          enriched.push({ ...app, student, slot });
+        }
+      }
+
+      // Merge local appointments
+      const localApps = db.appointments.getByLecturer(user.id);
+      for (const app of localApps) {
+        if (!enriched.some(e => e.id === app.id)) {
+          const student = db.users.findById(app.student_id);
+          const slot = db.slots.getAll().find(s => s.id === app.slot_id);
+          if (student && slot) {
+            enriched.push({ ...app, student, slot });
+          }
+        }
+      }
+
+      enriched.sort((a, b) => new Date(a.slot.date).getTime() - new Date(b.slot.date).getTime());
+      setAppointments(enriched);
+    } catch {
       const rawAppointments = db.appointments.getByLecturer(user.id);
       const enriched = rawAppointments.map(app => ({
         ...app,
@@ -52,15 +94,16 @@ export const LecturerDashboard = () => {
       
       enriched.sort((a, b) => new Date(a.slot.date).getTime() - new Date(b.slot.date).getTime());
       setAppointments(enriched);
+    } finally {
       setIsLoadingAppointments(false);
-    }, 700);
+    }
   };
 
   useEffect(() => {
     loadData();
   }, [user]);
 
-  const handleAddSlot = (e: React.FormEvent) => {
+  const handleAddSlot = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !date || !startTime || !endTime) return;
 
@@ -73,24 +116,47 @@ export const LecturerDashboard = () => {
       is_booked: false
     };
 
+    try {
+      await firebaseDb.slots.save(newSlot);
+    } catch (err) {
+      console.warn('Firestore slot save note:', err);
+    }
+
     db.slots.save(newSlot);
-    loadData(); // Refresh lists
+    await loadData();
     
-    // Reset form
     setDate(null);
     setStartTime(null);
     setEndTime(null);
+    toast.success('Consultation slot added successfully.');
   };
 
-  const handleDeleteSlot = (id: string) => {
+  const handleDeleteSlot = async (id: string) => {
+    try {
+      await firebaseDb.slots.delete(id);
+    } catch (err) {
+      console.warn('Firestore slot delete note:', err);
+    }
+
     db.slots.delete(id);
-    loadData();
+    await loadData();
+    toast.info('Slot removed.');
   };
 
-  const handleUpdateAppointment = (id: string, status: 'approved' | 'rejected') => {
+  const handleUpdateAppointment = async (id: string, status: 'approved' | 'rejected') => {
+    try {
+      await firebaseDb.appointments.updateStatus(id, status);
+      if (status === 'rejected') {
+        const app = appointments.find(a => a.id === id);
+        if (app) {
+          await firebaseDb.slots.markBooked(app.slot_id, false);
+        }
+      }
+    } catch (err) {
+      console.warn('Firestore appointment status note:', err);
+    }
+
     db.appointments.updateStatus(id, status);
-    
-    // If rejected, free up the slot again
     if (status === 'rejected') {
       const app = db.appointments.getByLecturer(user!.id).find(a => a.id === id);
       if (app) {
@@ -100,7 +166,7 @@ export const LecturerDashboard = () => {
     } else {
       toast.success('Appointment approved!');
     }
-    loadData();
+    await loadData();
   };
 
   const SkeletonSlot = () => (

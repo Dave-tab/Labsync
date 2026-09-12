@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { db, Slot, LocalUser, Appointment, generateId } from '../../lib/storage';
+import { firebaseDb } from '../../lib/firebaseService';
 import { Search, Calendar, Clock, User, ChevronRight, BookOpen, CheckCircle, Clock as ClockIcon, Settings, Trash2, GraduationCap, Building, MapPin, Mail } from 'lucide-react';
 import { Profile } from '../Profile';
 import { useAppointmentReminder } from '../../hooks/useAppointmentReminder';
@@ -20,25 +21,65 @@ export const StudentDashboard = () => {
   // Initialize appointment reminder hook
   useAppointmentReminder(myAppointments);
 
-  
   // Loading states
   const [isLoadingLecturers, setIsLoadingLecturers] = useState(true);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
 
-  const loadLecturersAndAppointments = () => {
+  const loadLecturersAndAppointments = async () => {
     if (!user) return;
     
-    // Simulate network delay for lecturers
     setIsLoadingLecturers(true);
-    setTimeout(() => {
+    try {
+      // Try fetching lecturers from Firestore
+      const fbLecturers = await firebaseDb.users.getLecturers();
+      if (fbLecturers && fbLecturers.length > 0) {
+        setLecturers(fbLecturers);
+      } else {
+        setLecturers(db.users.getLecturers());
+      }
+    } catch {
       setLecturers(db.users.getLecturers());
+    } finally {
       setIsLoadingLecturers(false);
-    }, 600);
+    }
 
-    // Simulate network delay for appointments
     setIsLoadingAppointments(true);
-    setTimeout(() => {
+    try {
+      // Fetch appointments from Firestore
+      const rawAppointments = await firebaseDb.appointments.getByStudent(user.id);
+      const allSlots = await firebaseDb.slots.getAll();
+      const localSlots = db.slots.getAll();
+      const mergedSlots = [...allSlots, ...localSlots];
+
+      const enriched: (Appointment & { lecturer: LocalUser, slot: Slot })[] = [];
+      
+      for (const app of rawAppointments) {
+        let lecturer = await firebaseDb.users.get(app.lecturer_id) as LocalUser;
+        if (!lecturer) {
+          lecturer = db.users.findById(app.lecturer_id)!;
+        }
+        const slot = mergedSlots.find(s => s.id === app.slot_id);
+        if (lecturer && slot) {
+          enriched.push({ ...app, lecturer, slot });
+        }
+      }
+
+      // Also include any offline local appointments
+      const localApps = db.appointments.getByStudent(user.id);
+      for (const app of localApps) {
+        if (!enriched.some(e => e.id === app.id)) {
+          const lecturer = db.users.findById(app.lecturer_id);
+          const slot = db.slots.getAll().find(s => s.id === app.slot_id);
+          if (lecturer && slot) {
+            enriched.push({ ...app, lecturer, slot });
+          }
+        }
+      }
+
+      enriched.sort((a, b) => new Date(a.slot.date).getTime() - new Date(b.slot.date).getTime());
+      setMyAppointments(enriched);
+    } catch {
       const rawAppointments = db.appointments.getByStudent(user.id);
       const enriched = rawAppointments.map(app => ({
         ...app,
@@ -48,16 +89,30 @@ export const StudentDashboard = () => {
       
       enriched.sort((a, b) => new Date(a.slot.date).getTime() - new Date(b.slot.date).getTime());
       setMyAppointments(enriched);
+    } finally {
       setIsLoadingAppointments(false);
-    }, 800);
+    }
   };
 
-  const loadSlots = (lecturerId: string) => {
+  const loadSlots = async (lecturerId: string) => {
     setIsLoadingSlots(true);
-    setTimeout(() => {
+    try {
+      const fbSlots = await firebaseDb.slots.getAvailable(lecturerId);
+      const localSlots = db.slots.getAvailable(lecturerId);
+      
+      // Merge unique available slots
+      const combined = [...fbSlots];
+      for (const s of localSlots) {
+        if (!combined.some(c => c.id === s.id)) {
+          combined.push(s);
+        }
+      }
+      setAvailableSlots(combined);
+    } catch {
       setAvailableSlots(db.slots.getAvailable(lecturerId));
+    } finally {
       setIsLoadingSlots(false);
-    }, 500);
+    }
   };
 
   useEffect(() => {
@@ -72,10 +127,9 @@ export const StudentDashboard = () => {
     }
   }, [selectedLecturer]);
 
-  const handleBookSlot = (slotId: string) => {
+  const handleBookSlot = async (slotId: string) => {
     if (!user || !selectedLecturer) return;
     
-    // Create actual appointment record
     const appointment: Appointment = {
       id: generateId(),
       student_id: user.id,
@@ -86,19 +140,36 @@ export const StudentDashboard = () => {
       created_at: new Date().toISOString()
     };
     
+    try {
+      // Execute atomic booking transaction in Firestore
+      await firebaseDb.appointments.bookSlotWithTransaction(appointment);
+    } catch (err: any) {
+      console.warn('Firestore transaction note (syncing local):', err);
+    }
+
+    // Mirror to local storage
     db.appointments.save(appointment);
     db.slots.markBooked(slotId);
     
-    loadLecturersAndAppointments();
-    loadSlots(selectedLecturer);
+    await loadLecturersAndAppointments();
+    if (selectedLecturer) {
+      await loadSlots(selectedLecturer);
+    }
     toast.success("Appointment successfully booked!");
     setActiveTab('appointments');
   };
 
-  const handleCancelAppointment = (appointmentId: string, slotId: string) => {
+  const handleCancelAppointment = async (appointmentId: string, slotId: string) => {
+    try {
+      await firebaseDb.appointments.updateStatus(appointmentId, 'cancelled' as any);
+      await firebaseDb.slots.markBooked(slotId, false);
+    } catch (err) {
+      console.warn('Firestore update note:', err);
+    }
+
     db.appointments.updateStatus(appointmentId, 'cancelled' as any);
     db.slots.markBooked(slotId, false);
-    loadLecturersAndAppointments();
+    await loadLecturersAndAppointments();
     toast.info("Appointment cancelled successfully.");
   };
 

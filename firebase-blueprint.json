@@ -1,284 +1,54 @@
 {
   "entities": {
-    "User": {
-      "title": "User",
-      "description": "A user in the system (Student, Lecturer, or Administrator).",
+    "users": {
+      "title": "Users",
+      "description": "User profiles for students and lecturers",
       "type": "object",
       "properties": {
-        "email": {
-          "type": "string",
-          "format": "email",
-          "maxLength": 255
-        },
-        "first_name": {
-          "type": "string",
-          "maxLength": 100
-        },
-        "last_name": {
-          "type": "string",
-          "maxLength": 100
-        },
-        "role": {
-          "type": "string",
-          "enum": ["student", "lecturer", "administrator"]
-        },
-        "is_active": {
-          "type": "boolean"
-        },
-        "department_id": {
-          "type": "string",
-          "maxLength": 128
-        },
-        "level": {
-          "type": "string",
-          "maxLength": 50
-        },
-        "office_location": {
-          "type": "string",
-          "maxLength": 255
-        },
-        "created_at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updated_at": {
-          "type": "string",
-          "format": "date-time"
-        }
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "first_name": { "type": "string" },
+        "last_name": { "type": "string" },
+        "role": { "type": "string", "enum": ["student", "lecturer", "admin"] },
+        "faculty": { "type": "string" },
+        "department": { "type": "string" },
+        "department_id": { "type": "string" },
+        "level": { "type": "string" },
+        "office_location": { "type": "string" },
+        "is_active": { "type": "boolean" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" }
       },
-      "required": ["email", "first_name", "last_name", "role", "is_active", "created_at", "updated_at"]
+      "required": ["id", "email", "first_name", "last_name", "role"]
     },
-    "Department": {
-      "title": "Department",
-      "description": "A university department.",
+    "slots": {
+      "title": "Consultation Slots",
+      "description": "Available time slots created by lecturers",
       "type": "object",
       "properties": {
-        "name": {
-          "type": "string",
-          "maxLength": 200
-        },
-        "code": {
-          "type": "string",
-          "maxLength": 20
-        },
-        "faculty": {
-          "type": "string",
-          "maxLength": 200
-        },
-        "created_at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updated_at": {
-          "type": "string",
-          "format": "date-time"
-        }
+        "id": { "type": "string" },
+        "lecturer_id": { "type": "string" },
+        "date": { "type": "string" },
+        "start_time": { "type": "string" },
+        "end_time": { "type": "string" },
+        "is_booked": { "type": "boolean" }
       },
-      "required": ["name", "code", "faculty", "created_at", "updated_at"]
+      "required": ["id", "lecturer_id", "date", "start_time", "end_time", "is_booked"]
     },
-    "AvailabilitySlot": {
-      "title": "Availability Slot",
-      "description": "A time slot when a lecturer is available.",
+    "appointments": {
+      "title": "Appointments",
+      "description": "Bookings between students and lecturers",
       "type": "object",
       "properties": {
-        "lecturer_id": {
-          "type": "string",
-          "maxLength": 128
-        },
-        "date": {
-          "type": "string",
-          "format": "date"
-        },
-        "start_time": {
-          "type": "string",
-          "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
-        },
-        "end_time": {
-          "type": "string",
-          "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
-        },
-        "is_available": {
-          "type": "boolean"
-        },
-        "created_at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updated_at": {
-          "type": "string",
-          "format": "date-time"
-        }
+        "id": { "type": "string" },
+        "student_id": { "type": "string" },
+        "lecturer_id": { "type": "string" },
+        "slot_id": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected", "completed"] },
+        "notes": { "type": "string" },
+        "created_at": { "type": "string" }
       },
-      "required": ["lecturer_id", "date", "start_time", "end_time", "is_available", "created_at", "updated_at"]
-    },
-    "Appointment": {
-      "title": "Appointment",
-      "description": "An appointment between a student and a lecturer.",
-      "type": "object",
-      "properties": {
-        "student_id": {
-          "type": "string",
-          "maxLength": 128
-        },
-        "lecturer_id": {
-          "type": "string",
-          "maxLength": 128
-        },
-        "availability_slot_id": {
-          "type": "string",
-          "maxLength": 128
-        },
-        "appointment_date": {
-          "type": "string",
-          "format": "date"
-        },
-        "start_time": {
-          "type": "string",
-          "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
-        },
-        "end_time": {
-          "type": "string",
-          "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
-        },
-        "reason": {
-          "type": "string",
-          "maxLength": 1000
-        },
-        "status": {
-          "type": "string",
-          "enum": ["pending", "approved", "rejected", "rescheduled", "cancelled", "completed"]
-        },
-        "rejection_reason": {
-          "type": "string",
-          "maxLength": 1000
-        },
-        "reschedule_reason": {
-          "type": "string",
-          "maxLength": 1000
-        },
-        "cancelled_by": {
-          "type": "string",
-          "maxLength": 128
-        },
-        "cancelled_at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "completed_at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "created_at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updated_at": {
-          "type": "string",
-          "format": "date-time"
-        }
-      },
-      "required": ["student_id", "lecturer_id", "availability_slot_id", "appointment_date", "start_time", "end_time", "reason", "status", "created_at", "updated_at"]
-    },
-    "Notification": {
-      "title": "Notification",
-      "description": "A notification for a user.",
-      "type": "object",
-      "properties": {
-        "recipient_id": {
-          "type": "string",
-          "maxLength": 128
-        },
-        "title": {
-          "type": "string",
-          "maxLength": 255
-        },
-        "message": {
-          "type": "string",
-          "maxLength": 1000
-        },
-        "type": {
-          "type": "string",
-          "maxLength": 50
-        },
-        "related_appointment_id": {
-          "type": "string",
-          "maxLength": 128
-        },
-        "is_read": {
-          "type": "boolean"
-        },
-        "created_at": {
-          "type": "string",
-          "format": "date-time"
-        }
-      },
-      "required": ["recipient_id", "title", "message", "type", "is_read", "created_at"]
-    },
-    "AuditLog": {
-      "title": "Audit Log",
-      "description": "An audit log of system activity.",
-      "type": "object",
-      "properties": {
-        "actor_id": {
-          "type": "string",
-          "maxLength": 128
-        },
-        "action": {
-          "type": "string",
-          "maxLength": 255
-        },
-        "entity_type": {
-          "type": "string",
-          "maxLength": 100
-        },
-        "entity_id": {
-          "type": "string",
-          "maxLength": 128
-        },
-        "created_at": {
-          "type": "string",
-          "format": "date-time"
-        }
-      },
-      "required": ["actor_id", "action", "entity_type", "entity_id", "created_at"]
-    }
-  },
-  "firestore": {
-    "/users/{userId}": {
-      "schema": {
-        "$ref": "#/entities/User"
-      },
-      "description": "Stores all users (students, lecturers, admins) keyed by their Firebase Auth UID."
-    },
-    "/departments/{departmentId}": {
-      "schema": {
-        "$ref": "#/entities/Department"
-      },
-      "description": "Stores university departments."
-    },
-    "/availability_slots/{slotId}": {
-      "schema": {
-        "$ref": "#/entities/AvailabilitySlot"
-      },
-      "description": "Stores available time slots for lecturers."
-    },
-    "/appointments/{appointmentId}": {
-      "schema": {
-        "$ref": "#/entities/Appointment"
-      },
-      "description": "Stores all appointments."
-    },
-    "/notifications/{notificationId}": {
-      "schema": {
-        "$ref": "#/entities/Notification"
-      },
-      "description": "Stores notifications for users."
-    },
-    "/audit_logs/{logId}": {
-      "schema": {
-        "$ref": "#/entities/AuditLog"
-      },
-      "description": "Stores audit logs."
+      "required": ["id", "student_id", "lecturer_id", "slot_id", "status"]
     }
   }
 }

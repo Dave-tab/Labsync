@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check authentication
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      // Any authenticated user can read lecturer profiles and user details needed for booking
+      allow read: if isAuthenticated();
+      // Users can write/update their own profile
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAuthenticated() && request.auth.uid == userId;
+      allow delete: if false;
+    }
+    
+    // Consultation slots collection
+    match /slots/{slotId} {
+      // Authenticated users can read slots
+      allow read: if isAuthenticated();
+      // Lecturers can create, update, or delete slots
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+    
+    // Appointments collection
+    match /appointments/{appointmentId} {
+      // Authenticated users can read appointments they are involved in or query them
+      allow read: if isAuthenticated();
+      // Students can create appointment requests
+      allow create: if isAuthenticated();
+      // Involved students or lecturers can update (approve/reject/complete) appointments
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+  }
+}

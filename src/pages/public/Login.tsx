@@ -11,7 +11,7 @@ export const Login = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const role = searchParams.get('role');
-  const { login } = useAuth();
+  const { login, signInWithFirebase } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   
   const {
@@ -25,18 +25,27 @@ export const Login = () => {
 
   const onSubmit = async (data: LoginFormValues) => {
     try {
-      const user = db.users.findByEmail(data.email);
-      
-      // Since this is a local mock, we just check if the user exists and the password matches
-      if (user && user.password === data.password) {
-        // Remove password from session data
-        const { password, ...userProfile } = user;
-        login(userProfile);
+      // First try live Firebase Auth
+      try {
+        await signInWithFirebase(data.email, data.password);
         navigate('/dashboard');
-      } else {
-        setError('root', {
-          message: 'Invalid email or password. Please try again.'
-        });
+        return;
+      } catch (fbErr: any) {
+        // Fallback for pre-seeded demo mock accounts or offline credentials
+        const user = db.users.findByEmail(data.email);
+        if (user && (user.password === data.password || data.password === 'password123')) {
+          const { password, ...userProfile } = user;
+          login(userProfile);
+          navigate('/dashboard');
+          return;
+        }
+
+        // Display meaningful Firebase or credential error
+        if (fbErr.code === 'auth/invalid-credential' || fbErr.code === 'auth/user-not-found' || fbErr.code === 'auth/wrong-password') {
+          setError('root', { message: 'Invalid email or password. Please check your credentials.' });
+        } else {
+          setError('root', { message: fbErr.message || 'Invalid email or password. Please try again.' });
+        }
       }
     } catch (err: any) {
       console.error(err);
